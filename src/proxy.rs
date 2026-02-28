@@ -248,13 +248,17 @@ async fn forward(
         .request(parts.method.clone(), target)
         .body(body_bytes.to_vec());
 
-    // Remove hop-by-hop headers and rewrite Host implicitly for the upstream.
-    // Why: these headers are per-connection metadata and must not be forwarded.
+    // ホップバイホップヘッダーを除去してupstreamに転送する。
+    // Hostはループ内でスキップし、ループ後に元の値を明示的に設定する。
     for (name, value) in &parts.headers {
         if *name != HeaderName::from_static("host") && !is_hop_by_hop(name) {
             upstream_req = upstream_req.header(name, value);
         }
     }
+
+    // 元のHostヘッダーをupstreamに保持する（nginx proxy_set_header Host $host 相当）
+    // hyper-utilはentry(HOST).or_insert_with()で既存Hostを尊重するため重複しない
+    upstream_req = upstream_req.header("host", &original_host);
 
     // 元のクライアントリクエスト情報をupstreamに伝達する
     upstream_req = upstream_req
@@ -501,6 +505,61 @@ mod tests {
 
         // マッチャーで検証済みだが、ステータスでも確認
         // ヘッダーが一致しない場合、wiremockは404を返す
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn original_host_header_is_preserved() {
+        let server = MockServer::start().await;
+        Mock::given(matchers::method("GET"))
+            .and(matchers::path("/api"))
+            .and(matchers::header("host", "myapp.dev"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = test_client();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/api")
+            .header("host", "myapp.dev")
+            .body(Body::empty())
+            .unwrap();
+
+        let peer: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let resp = forward(&client, req, &server.uri(), "myapp.dev".into(), peer)
+            .await
+            .unwrap();
+
+        // wiremockのマッチャーでHost: myapp.devを検証済み
+        // Hostが一致しない場合、wiremockは404を返す
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn original_host_header_with_port_is_preserved() {
+        let server = MockServer::start().await;
+        Mock::given(matchers::method("GET"))
+            .and(matchers::path("/"))
+            .and(matchers::header("host", "myapp.dev:443"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = test_client();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/")
+            .header("host", "myapp.dev:443")
+            .body(Body::empty())
+            .unwrap();
+
+        let peer: SocketAddr = "10.0.0.1:9999".parse().unwrap();
+        let resp = forward(&client, req, &server.uri(), "myapp.dev:443".into(), peer)
+            .await
+            .unwrap();
+
+        // ポート付きHostも正しく転送されることを検証
         assert_eq!(resp.status(), StatusCode::OK);
     }
 }
