@@ -1,10 +1,8 @@
-# sptth
+# holonomy
 
-<p align="center">
-  <img src="docs/assets/logo.banner.svg" alt="sptth logo" width="900" />
-</p>
+All-in-one tool for local server development with valid HTTPS.
 
-All-in-one tool for local server development with **valid HTTPS**.
+> This project is a fork of [Jxck/sptth](https://github.com/jxck/sptth), customized for personal use.
 
 ## Concept
 
@@ -19,7 +17,7 @@ Previously, setting up local real-domain HTTPS usually required three separate p
 
 That meant dealing with `sudo` across multiple tools and steps.
 
-`sptth` now bundles everything needed to develop locally on real domains such as `https://${your-production-domain}`.
+`holonomy` now bundles everything needed to develop locally on real domains such as `https://${your-production-domain}`.
 
 - Local DNS
 - Local CA
@@ -27,10 +25,10 @@ That meant dealing with `sudo` across multiple tools and steps.
 
 You can start all of them with one `sudo` command and test locally in conditions closer to production.
 
-`sptth` consolidates this into one flow:
+`holonomy` consolidates this into one flow:
 
 ```sh
-sudo sptth config.toml
+sudo holonomy config.toml
 ```
 
 One command, one `sudo`, one process for all local development.
@@ -38,19 +36,19 @@ One command, one `sudo`, one process for all local development.
 ## Caution
 
 > [!CAUTION]
-> `sptth` changes your local system settings.
-> **Use it at your own risk**
+> `holonomy` changes your local system settings.
+> Use it at your own risk.
 
 ## Security Notes
 
-`sptth` is designed for **local development only** and should not be exposed to untrusted networks.
+`holonomy` is designed for local development only and should not be exposed to untrusted networks.
 
-- The reverse proxy enforces a **10 MiB request body limit** (request and response) to prevent memory exhaustion.
-- Concurrent proxy connections are capped at **512** and DNS handler tasks at **256**.
-- Upstream HTTP requests have a **5 s connect timeout** and **30 s overall timeout**; TLS handshakes time out after **10 s**.
-- DNS forwarding **validates the source address** of upstream responses to reject spoofed packets.
-- Private key files (CA and leaf) are created with **mode 0600** (owner-only read/write) on Unix.
-- CA and certificate directories are created with **mode 0700** (owner-only access) on Unix.
+- The reverse proxy enforces a 10 MiB request body limit (request and response) to prevent memory exhaustion.
+- Concurrent proxy connections are capped at 512 and DNS handler tasks at 256.
+- Upstream HTTP requests have a 5 s connect timeout and 30 s overall timeout; TLS handshakes time out after 10 s.
+- DNS forwarding validates the source address of upstream responses to reject spoofed packets.
+- Private key files (CA and leaf) are created with mode 0600 (owner-only read/write) on Unix.
+- CA and certificate directories are created with mode 0700 (owner-only access) on Unix.
 
 ## Quick Start
 
@@ -80,7 +78,7 @@ After downloading release files, verify them before execution.
 
 ```sh
 VERSION=v0.1.0
-FILE=sptth-${VERSION}-aarch64-apple-darwin.tar.gz
+FILE=holonomy-${VERSION}-aarch64-apple-darwin.tar.gz
 ```
 
 1. Verify checksum:
@@ -95,7 +93,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 cosign verify-blob \
   --certificate "${FILE}.crt" \
   --signature "${FILE}.sig" \
-  --certificate-identity-regexp "https://github.com/jxck/sptth/.github/workflows/release.yml@refs/tags/${VERSION}" \
+  --certificate-identity-regexp "https://github.com/hidari/holonomy/.github/workflows/release.yml@refs/tags/${VERSION}" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${FILE}"
 ```
@@ -103,7 +101,7 @@ cosign verify-blob \
 3. Verify provenance attestation:
 
 ```sh
-gh attestation verify "${FILE}" --repo jxck/sptth
+gh attestation verify "${FILE}" --repo hidari/holonomy
 ```
 
 ## Development Setup
@@ -138,7 +136,7 @@ The `pre-commit` hook runs format checks for `*.rs`, `*.json`, `*.md`, and `*.to
 ## Run
 
 ```sh
-sudo sptth config.toml
+sudo holonomy config.toml
 ```
 
 It requires installing a local CA into the OS trust store. Please accept it (at your own risk).
@@ -161,8 +159,8 @@ A = ["127.0.0.1"]
 AAAA = ["::1"]
 
 [tls]
-ca_dir = "~/.config/sptth/ca"
-cert_dir = "~/.config/sptth/certs"
+ca_dir = "~/.config/holonomy/ca"
+cert_dir = "~/.config/holonomy/certs"
 
 [[proxy]]
 domain = "example.com"
@@ -242,13 +240,13 @@ Each `[[record]]` entry defines local DNS overrides for a domain.
 
 ```toml
 [tls]
-ca_dir = "~/.config/sptth/ca"
-cert_dir = "~/.config/sptth/certs"
+ca_dir = "~/.config/holonomy/ca"
+cert_dir = "~/.config/holonomy/certs"
 ```
 
 The `[tls]` section is required in the config file.
 
-`sptth` creates a local CA and installs it into the OS trust store.
+`holonomy` creates a local CA and installs it into the OS trust store.
 On first run, the generated CA certificate and key are saved in `ca_dir`.
 If files already exist in `ca_dir`, they are reused and trust-store modification is skipped.
 
@@ -260,9 +258,9 @@ Files are stored in `cert_dir` and used by the proxy to provide valid TLS in bro
 - `[tls].renew_before_days`
   - Renewal threshold before expiry in days (default: `30`)
 - `[tls].ca_dir`
-  - Root CA certificate/key directory (default: `~/.config/sptth/ca`)
+  - Root CA certificate/key directory (default: `~/.config/holonomy/ca`)
 - `[tls].cert_dir`
-  - Domain certificate/key directory (default: `~/.config/sptth/certs`)
+  - Domain certificate/key directory (default: `~/.config/holonomy/certs`)
 
 (When running with `sudo`, default `tls.ca_dir` / `tls.cert_dir` are resolved under the `SUDO_USER` home directory.)
 
@@ -293,11 +291,11 @@ This forwards `https://example.com` to `http://localhost:3000`.
 ## Build and Run from Source
 
 ```sh
-git clone https://github.com/jxck/sptth.git
-cd sptth
+git clone https://github.com/hidari/holonomy.git
+cd holonomy
 cargo run -p xtask -- setup
 cargo build --release
-sudo ./target/release/sptth config.toml
+sudo ./target/release/holonomy config.toml
 ```
 
 ## Verification
@@ -325,6 +323,38 @@ curl https://example.com/
 <title>hello</title>
 ```
 
+## Migration from sptth
+
+If you previously used `sptth`, remove the old CA certificate from the OS trust store:
+
+### macOS
+
+```sh
+sudo security delete-certificate -c "sptth local ca" /Library/Keychains/System.keychain
+```
+
+### Linux (Debian/Ubuntu)
+
+```sh
+sudo rm /usr/local/share/ca-certificates/sptth-rootCA.crt
+sudo update-ca-certificates
+```
+
+### Linux (RHEL/Fedora)
+
+```sh
+sudo rm /etc/pki/ca-trust/source/anchors/sptth-rootCA.crt
+sudo update-ca-trust extract
+```
+
+### Old config directory
+
+```sh
+rm -rf ~/.config/sptth/
+```
+
 ## ACK
 
-All source code was written in Rust by Codex & Claude.
+This project is a fork of [Jxck/sptth](https://github.com/jxck/sptth).
+
+The original source was written in Rust by Codex & Claude.
