@@ -518,6 +518,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "holonomy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "hickory-proto",
+ "homedir",
+ "http",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "reqwest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "tempfile",
+ "time",
+ "tokio",
+ "tokio-rustls",
+ "toml",
+ "tower",
+ "wiremock",
+]
+
+[[package]]
 name = "homedir"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,31 +1381,6 @@ checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "sptth"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "hickory-proto",
- "homedir",
- "http",
- "hyper",
- "hyper-util",
- "rcgen",
- "reqwest",
- "rustls",
- "rustls-pemfile",
- "serde",
- "tempfile",
- "time",
- "tokio",
- "tokio-rustls",
- "toml",
- "tower",
- "wiremock",
 ]
 
 [[package]]

@@ -82,7 +82,7 @@ fn ensure_tools(root: &Path) -> Result<()> {
 
     ensure_dprint_binary(root)?;
     let client = reqwest::blocking::Client::builder()
-        .user_agent("sptth-xtask")
+        .user_agent("holonomy-xtask")
         .build()
         .context("failed to build HTTP client")?;
 
