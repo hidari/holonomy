@@ -10,6 +10,7 @@ members = ["xtask"]
 [dependencies]
 anyhow = "1.0"
 axum = "0.8"
+clap = { version = "4", features = ["derive"] }
 hickory-proto = "0.25"
 homedir = "0.3"
 http = "1.3"

@@ -338,6 +338,19 @@ fn default_state_base_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".holonomy"))
 }
 
+pub fn default_ca_dir() -> PathBuf {
+    default_state_base_dir().join("ca")
+}
+
+pub fn default_cert_dir() -> PathBuf {
+    default_state_base_dir().join("certs")
+}
+
+/// sptthからのマイグレーション用: レガシーベースディレクトリを返す
+pub fn legacy_base_dir() -> Option<PathBuf> {
+    resolve_home().map(|h| h.join(".config").join("sptth"))
+}
+
 fn expand_tilde(input: &str) -> PathBuf {
     if input == "~"
         && let Some(home) = resolve_home()
@@ -354,7 +367,7 @@ fn expand_tilde(input: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, expand_tilde, normalize_domain};
+    use super::{AppConfig, default_ca_dir, default_cert_dir, expand_tilde, normalize_domain};
 
     fn base_toml(proxy_block: &str) -> String {
         format!(
@@ -483,6 +496,18 @@ upstream = "localhost:3000"
         assert_eq!(config.dns.listen.port(), 53);
         assert_eq!(config.proxies.len(), 1);
         assert_eq!(config.proxies[0].domain, "example.com");
+    }
+
+    #[test]
+    fn default_ca_dir_ends_with_ca() {
+        let path = default_ca_dir();
+        assert!(path.ends_with("ca"));
+    }
+
+    #[test]
+    fn default_cert_dir_ends_with_certs() {
+        let path = default_cert_dir();
+        assert!(path.ends_with("certs"));
     }
 
     #[test]

@@ -34,3 +34,28 @@ pub fn install_ca_cert(ca_cert_path: &Path) -> Result<()> {
         );
     }
 }
+
+pub fn uninstall_ca_cert(cn_names: &[&str]) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::uninstall_ca_cert(cn_names)
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        linux::uninstall_ca_cert(cn_names)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows::uninstall_ca_cert(cn_names)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = cn_names;
+        anyhow::bail!(
+            "unsupported platform: trust-store auto-uninstall supports only macOS, Linux, and Windows"
+        );
+    }
+}

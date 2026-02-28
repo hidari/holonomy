@@ -141,6 +141,28 @@ sudo holonomy config.toml
 
 It requires installing a local CA into the OS trust store. Please accept it (at your own risk).
 
+## Uninstall CA
+
+To remove the CA certificate from the OS trust store:
+
+```sh
+sudo holonomy --cleanup-ca
+```
+
+To also delete local CA and certificate files:
+
+```sh
+sudo holonomy --cleanup-ca --remove-files
+```
+
+You can specify custom directories if they differ from defaults:
+
+```sh
+sudo holonomy --cleanup-ca --remove-files --ca-dir /path/to/ca --cert-dir /path/to/certs
+```
+
+This also removes legacy `sptth` CA certificates if present.
+
 ## `config.toml`
 
 ```toml
@@ -325,33 +347,13 @@ curl https://example.com/
 
 ## Migration from sptth
 
-If you previously used `sptth`, remove the old CA certificate from the OS trust store:
-
-### macOS
+If you previously used `sptth`, remove the old CA certificate and config files with a single command:
 
 ```sh
-sudo security delete-certificate -c "sptth local ca" /Library/Keychains/System.keychain
+sudo holonomy --cleanup-ca --remove-files
 ```
 
-### Linux (Debian/Ubuntu)
-
-```sh
-sudo rm /usr/local/share/ca-certificates/sptth-rootCA.crt
-sudo update-ca-certificates
-```
-
-### Linux (RHEL/Fedora)
-
-```sh
-sudo rm /etc/pki/ca-trust/source/anchors/sptth-rootCA.crt
-sudo update-ca-trust extract
-```
-
-### Old config directory
-
-```sh
-rm -rf ~/.config/sptth/
-```
+This removes both `sptth` and `holonomy` CA certificates from the OS trust store, and deletes `~/.config/sptth/` along with holonomy's own CA/cert directories.
 
 ## ACK
 

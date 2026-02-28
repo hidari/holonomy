@@ -18,7 +18,8 @@ use crate::{
     logging,
 };
 
-const ROOT_CA_COMMON_NAME: &str = "holonomy local ca";
+pub const ROOT_CA_COMMON_NAME: &str = "holonomy local ca";
+pub const LEGACY_CA_COMMON_NAME: &str = "sptth local ca";
 
 #[derive(Debug, Clone)]
 pub struct IssuedCert {
