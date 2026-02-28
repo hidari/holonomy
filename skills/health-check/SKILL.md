@@ -86,7 +86,7 @@ Keep the repository clean, reproducible, and aligned across code, tests, CI, and
 11. Skill-policy conformance pass
 
 - Verify that current code and workflow still conform to repository skills
-  (`sptth-dev`, `rust-error-handling`, `rust-testing`, `rust-security-checklist`).
+  (`holonomy-dev`, `rust-error-handling`, `rust-testing`, `rust-security-checklist`).
 - Identify mismatches between implemented behavior and skill guidance.
 - Propose concrete remediation when drift is detected.
 

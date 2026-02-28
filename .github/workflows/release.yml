@@ -33,15 +33,15 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             archive_ext: tar.gz
-            bin_name: sptth
+            bin_name: holonomy
           - os: macos-14
             target: aarch64-apple-darwin
             archive_ext: tar.gz
-            bin_name: sptth
+            bin_name: holonomy
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive_ext: zip
-            bin_name: sptth.exe
+            bin_name: holonomy.exe
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -57,7 +57,7 @@ jobs:
         run: |
           mkdir -p dist
           version="${GITHUB_REF_NAME}"
-          base="sptth-${version}-${{ matrix.target }}"
+          base="holonomy-${version}-${{ matrix.target }}"
           cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
           tar -C dist -czf "dist/${base}.${{ matrix.archive_ext }}" "${{ matrix.bin_name }}"
           rm "dist/${{ matrix.bin_name }}"
@@ -67,7 +67,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           $version = "${env:GITHUB_REF_NAME}"
-          $base = "sptth-$version-${{ matrix.target }}"
+          $base = "holonomy-$version-${{ matrix.target }}"
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${{ matrix.bin_name }}"
           Compress-Archive -Path "dist/${{ matrix.bin_name }}" -DestinationPath "dist/$base.${{ matrix.archive_ext }}" -Force
           Remove-Item "dist/${{ matrix.bin_name }}"

@@ -1,6 +1,6 @@
 # Release Playbook
 
-This document defines the release process for `sptth`, including signing, attestations, and pre-release risk checks.
+This document defines the release process for `holonomy`, including signing, attestations, and pre-release risk checks.
 
 ## Security Model
 
@@ -10,7 +10,7 @@ Releases must provide:
 2. Artifact integrity (checksums + signature)
 3. Build provenance (attestation from CI)
 
-`sptth` should be treated as a local-development tool with privileged behavior (`sudo`, local CA, DNS/proxy changes). Release quality and trust signals must be strict.
+`holonomy` should be treated as a local-development tool with privileged behavior (`sudo`, local CA, DNS/proxy changes). Release quality and trust signals must be strict.
 
 ## Required GitHub Protection
 

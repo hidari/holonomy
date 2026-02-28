@@ -334,8 +334,8 @@ fn resolve_home() -> Option<PathBuf> {
 
 fn default_state_base_dir() -> PathBuf {
     resolve_home()
-        .map(|h| h.join(".config").join("sptth"))
-        .unwrap_or_else(|| PathBuf::from(".sptth"))
+        .map(|h| h.join(".config").join("holonomy"))
+        .unwrap_or_else(|| PathBuf::from(".holonomy"))
 }
 
 fn expand_tilde(input: &str) -> PathBuf {
@@ -368,8 +368,8 @@ ttl_seconds = 1
 
 [tls]
 enabled = true
-ca_dir = "/tmp/sptth-ca"
-cert_dir = "/tmp/sptth-certs"
+ca_dir = "/tmp/holonomy-ca"
+cert_dir = "/tmp/holonomy-certs"
 valid_days = 90
 renew_before_days = 30
 
@@ -513,8 +513,8 @@ upstream = ["1.1.1.1:53"]
 
 [tls]
 enabled = true
-ca_dir = "/tmp/sptth-ca"
-cert_dir = "/tmp/sptth-certs"
+ca_dir = "/tmp/holonomy-ca"
+cert_dir = "/tmp/holonomy-certs"
 
 [[record]]
 domain = "example.com"
@@ -563,8 +563,8 @@ upstream = ["1.1.1.1:53"]
 
 [tls]
 enabled = true
-ca_dir = "/tmp/sptth-ca"
-cert_dir = "/tmp/sptth-certs"
+ca_dir = "/tmp/holonomy-ca"
+cert_dir = "/tmp/holonomy-certs"
 
 [[record]]
 domain = "example.com"

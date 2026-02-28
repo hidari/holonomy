@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
 
     logging::init(config.log_level);
 
-    println!("sptth started");
+    println!("holonomy started");
     println!("  config   : {}", config_path.display());
     println!("  dns      : {}", config.dns.listen);
     println!("  records  : {}", config.joined_domains());
@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
 
 fn parse_cli_args() -> Result<PathBuf> {
     let mut args = env::args();
-    let bin = args.next().unwrap_or_else(|| "sptth".to_string());
+    let bin = args.next().unwrap_or_else(|| "holonomy".to_string());
     let config_path = args
         .next()
         .map(PathBuf::from)

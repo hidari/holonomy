@@ -34,7 +34,7 @@ pub fn install_ca_cert(ca_cert_path: &Path) -> Result<()> {
 }
 
 fn install_with_update_ca_certificates(ca_cert_path: &Path) -> Result<()> {
-    let target = PathBuf::from("/usr/local/share/ca-certificates/sptth-rootCA.crt");
+    let target = PathBuf::from("/usr/local/share/ca-certificates/holonomy-rootCA.crt");
     fs::copy(ca_cert_path, &target)
         .with_context(|| format!("failed to copy CA certificate to {}", target.display()))?;
 
@@ -50,7 +50,7 @@ fn install_with_update_ca_certificates(ca_cert_path: &Path) -> Result<()> {
 }
 
 fn install_with_update_ca_trust(ca_cert_path: &Path) -> Result<()> {
-    let target = PathBuf::from("/etc/pki/ca-trust/source/anchors/sptth-rootCA.crt");
+    let target = PathBuf::from("/etc/pki/ca-trust/source/anchors/holonomy-rootCA.crt");
     fs::copy(ca_cert_path, &target)
         .with_context(|| format!("failed to copy CA certificate to {}", target.display()))?;
 
