@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};
 use axum::{
-    Router,
+    Extension, Router,
     body::{Body, to_bytes},
     extract::State,
     http::{HeaderName, Request, Response, StatusCode, Uri},
@@ -66,6 +66,7 @@ pub async fn run(proxies: Vec<ProxyConfig>, tls_config: Arc<ServerConfig>) -> Re
         routes: Arc::new(routes),
         client: reqwest::Client::builder()
             .use_rustls_tls()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(UPSTREAM_CONNECT_TIMEOUT)
             .timeout(UPSTREAM_REQUEST_TIMEOUT)
             .build()
@@ -131,8 +132,10 @@ pub async fn run(proxies: Vec<ProxyConfig>, tls_config: Arc<ServerConfig>) -> Re
                 };
 
             let io = TokioIo::new(tls_stream);
-            let service = service_fn(move |req: Request<Incoming>| {
+            let service = service_fn(move |mut req: Request<Incoming>| {
                 let app = app.clone();
+                // クライアントIPアドレスをリクエスト拡張に注入
+                req.extensions_mut().insert(peer);
                 async move { app.oneshot(req.map(Body::new)).await }
             });
 
@@ -146,13 +149,18 @@ pub async fn run(proxies: Vec<ProxyConfig>, tls_config: Arc<ServerConfig>) -> Re
     }
 }
 
-async fn proxy_handler(State(state): State<ProxyState>, req: Request<Body>) -> impl IntoResponse {
+async fn proxy_handler(
+    State(state): State<ProxyState>,
+    Extension(peer_addr): Extension<SocketAddr>,
+    req: Request<Body>,
+) -> impl IntoResponse {
     let incoming_host = req
         .headers()
         .get("host")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    let normalized_host = normalize_host(incoming_host);
+        .unwrap_or_default()
+        .to_string();
+    let normalized_host = normalize_host(&incoming_host);
 
     // Upstream selection is based on HTTP Host so multiple domains can share
     // a single listener address/port.
@@ -186,7 +194,15 @@ async fn proxy_handler(State(state): State<ProxyState>, req: Request<Body>) -> i
         ),
     );
 
-    match forward(&state.client, req, &route.base_url).await {
+    match forward(
+        &state.client,
+        req,
+        &route.base_url,
+        incoming_host,
+        peer_addr,
+    )
+    .await
+    {
         Ok(resp) => {
             logging::debug(
                 "PROXY",
@@ -205,6 +221,8 @@ async fn forward(
     client: &reqwest::Client,
     req: Request<Body>,
     base_url: &str,
+    original_host: String,
+    peer_addr: SocketAddr,
 ) -> Result<Response<Body>> {
     let (parts, body) = req.into_parts();
     let target = build_target_url(base_url, &parts.uri);
@@ -237,6 +255,12 @@ async fn forward(
             upstream_req = upstream_req.header(name, value);
         }
     }
+
+    // 元のクライアントリクエスト情報をupstreamに伝達する
+    upstream_req = upstream_req
+        .header("x-forwarded-host", &original_host)
+        .header("x-forwarded-proto", "https")
+        .header("x-forwarded-for", peer_addr.ip().to_string());
 
     let upstream_resp = upstream_req
         .send()
@@ -317,12 +341,15 @@ fn is_hop_by_hop(name: &HeaderName) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+
     use axum::{
         body::{Body, to_bytes},
-        http::{HeaderName, Uri},
+        http::{HeaderName, Request, StatusCode, Uri},
     };
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
-    use super::{MAX_REQUEST_BODY_BYTES, build_target_url, is_hop_by_hop, normalize_host};
+    use super::{MAX_REQUEST_BODY_BYTES, build_target_url, forward, is_hop_by_hop, normalize_host};
 
     #[test]
     fn normalize_host_removes_port() {
@@ -376,5 +403,104 @@ mod tests {
         let body = Body::from(oversized);
         let result = to_bytes(body, MAX_REQUEST_BODY_BYTES).await;
         assert!(result.is_err());
+    }
+
+    /// テスト用のreqwest::Clientを構築する（リダイレクト無効化済み）
+    fn test_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn redirect_response_passes_through() {
+        let server = MockServer::start().await;
+        Mock::given(matchers::method("GET"))
+            .and(matchers::path("/login"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("location", "https://example.com/dashboard"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = test_client();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login")
+            .header("host", "example.com")
+            .body(Body::empty())
+            .unwrap();
+
+        let peer: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let resp = forward(&client, req, &server.uri(), "example.com".into(), peer)
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            resp.headers().get("location").unwrap().to_str().unwrap(),
+            "https://example.com/dashboard"
+        );
+    }
+
+    #[tokio::test]
+    async fn permanent_redirect_passes_through() {
+        let server = MockServer::start().await;
+        Mock::given(matchers::method("GET"))
+            .and(matchers::path("/old"))
+            .respond_with(ResponseTemplate::new(301).insert_header("location", "/new"))
+            .mount(&server)
+            .await;
+
+        let client = test_client();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/old")
+            .header("host", "example.com")
+            .body(Body::empty())
+            .unwrap();
+
+        let peer: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+        let resp = forward(&client, req, &server.uri(), "example.com".into(), peer)
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            resp.headers().get("location").unwrap().to_str().unwrap(),
+            "/new"
+        );
+    }
+
+    #[tokio::test]
+    async fn forwarded_headers_are_set() {
+        let server = MockServer::start().await;
+        Mock::given(matchers::method("GET"))
+            .and(matchers::path("/check"))
+            .and(matchers::header("x-forwarded-host", "myapp.dev:443"))
+            .and(matchers::header("x-forwarded-proto", "https"))
+            .and(matchers::header("x-forwarded-for", "192.168.1.100"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = test_client();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/check")
+            .header("host", "myapp.dev:443")
+            .body(Body::empty())
+            .unwrap();
+
+        let peer: SocketAddr = "192.168.1.100:54321".parse().unwrap();
+        let resp = forward(&client, req, &server.uri(), "myapp.dev:443".into(), peer)
+            .await
+            .unwrap();
+
+        // マッチャーで検証済みだが、ステータスでも確認
+        // ヘッダーが一致しない場合、wiremockは404を返す
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }
