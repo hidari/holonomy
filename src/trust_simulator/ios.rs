@@ -2,15 +2,22 @@
 // xcrun simctl keychain コマンドを使用する。
 // macOS 以外のプラットフォームではスキップする。
 
-use std::{path::Path, process::Command};
+use std::path::Path;
+#[cfg(any(target_os = "macos", test))]
+use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+#[cfg(any(target_os = "macos", test))]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(target_os = "macos")]
+use anyhow::bail;
 
 use crate::logging;
 
 /// SUDO_USER環境変数からsudo実行元ユーザーを取得する。
 /// sudo経由で実行されている場合に元のユーザー名を返す。
 /// SUDO_USERが未設定・空・"root"の場合はNoneを返す。
+#[cfg(target_os = "macos")]
 fn sudo_user() -> Option<String> {
     std::env::var("SUDO_USER")
         .ok()
@@ -19,6 +26,7 @@ fn sudo_user() -> Option<String> {
 
 /// xcrun simctlコマンドを構築する。
 /// sudo実行時は元ユーザー権限で実行するため、sudo -u を付与する。
+#[cfg(any(target_os = "macos", test))]
 fn simctl_command(args: &[&str], run_as: Option<&str>) -> Command {
     if let Some(user) = run_as {
         let mut cmd = Command::new("sudo");
@@ -34,6 +42,7 @@ fn simctl_command(args: &[&str], run_as: Option<&str>) -> Command {
 }
 
 /// iOS Simulatorデバイス情報
+#[cfg(any(target_os = "macos", test))]
 #[derive(Debug)]
 struct SimDevice {
     udid: String,
@@ -135,6 +144,7 @@ fn list_booted_devices() -> Result<Vec<SimDevice>> {
 }
 
 /// simctl list devices の JSON 出力をパースしてデバイスリストを返す。
+#[cfg(any(target_os = "macos", test))]
 fn parse_device_list_json(json: &str) -> Result<Vec<SimDevice>> {
     let parsed: serde_json::Value =
         serde_json::from_str(json).context("simctl JSONのパースに失敗")?;
