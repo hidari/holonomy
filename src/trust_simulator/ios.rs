@@ -188,7 +188,9 @@ fn add_root_cert(device: &SimDevice, ca_cert_path: &Path) -> Result<()> {
     let _temp_cert = if run_as.is_some() {
         let content = std::fs::read(ca_cert_path)
             .with_context(|| format!("CA証明書の読み取りに失敗: {}", ca_cert_path.display()))?;
-        let tmp = tempfile::NamedTempFile::new().context("一時ファイルの作成に失敗")?;
+        // /tmp は全ユーザーがアクセス可能。デフォルトの temp_dir() は
+        // rootの /var/folders/.../ になり元ユーザーからアクセスできない
+        let tmp = tempfile::NamedTempFile::new_in("/tmp").context("一時ファイルの作成に失敗")?;
         std::fs::write(tmp.path(), &content).context("一時ファイルへの書き込みに失敗")?;
         #[cfg(unix)]
         {
