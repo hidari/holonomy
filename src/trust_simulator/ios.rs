@@ -8,6 +8,31 @@ use anyhow::{Context, Result, bail};
 
 use crate::logging;
 
+/// SUDO_USER環境変数からsudo実行元ユーザーを取得する。
+/// sudo経由で実行されている場合に元のユーザー名を返す。
+/// SUDO_USERが未設定・空・"root"の場合はNoneを返す。
+fn sudo_user() -> Option<String> {
+    std::env::var("SUDO_USER")
+        .ok()
+        .filter(|u| !u.trim().is_empty() && u != "root")
+}
+
+/// xcrun simctlコマンドを構築する。
+/// sudo実行時は元ユーザー権限で実行するため、sudo -u を付与する。
+fn simctl_command(args: &[&str], run_as: Option<&str>) -> Command {
+    if let Some(user) = run_as {
+        let mut cmd = Command::new("sudo");
+        cmd.args(["-u", user, "xcrun", "simctl"]);
+        cmd.args(args);
+        cmd
+    } else {
+        let mut cmd = Command::new("xcrun");
+        cmd.arg("simctl");
+        cmd.args(args);
+        cmd
+    }
+}
+
 /// iOS Simulatorデバイス情報
 #[derive(Debug)]
 struct SimDevice {
@@ -76,9 +101,8 @@ pub fn cleanup_trust(_ca_cert_path: &Path) -> Result<()> {
 /// xcrun simctl が利用可能か確認する。
 #[cfg(target_os = "macos")]
 fn check_simctl() -> Result<()> {
-    let output = Command::new("xcrun")
-        .arg("simctl")
-        .arg("help")
+    let run_as = sudo_user();
+    let output = simctl_command(&["help"], run_as.as_deref())
         .output()
         .context(
             "xcrun simctl の実行に失敗 (hint: Xcode Command Line Tools をインストールしてください)",
@@ -96,8 +120,8 @@ fn check_simctl() -> Result<()> {
 /// `xcrun simctl list devices booted -j` のJSON出力をパースする。
 #[cfg(target_os = "macos")]
 fn list_booted_devices() -> Result<Vec<SimDevice>> {
-    let output = Command::new("xcrun")
-        .args(["simctl", "list", "devices", "booted", "-j"])
+    let run_as = sudo_user();
+    let output = simctl_command(&["list", "devices", "booted", "-j"], run_as.as_deref())
         .output()
         .context("xcrun simctl list の実行に失敗")?;
 
@@ -154,18 +178,48 @@ fn parse_device_list_json(json: &str) -> Result<Vec<SimDevice>> {
 }
 
 /// 指定デバイスにCA証明書をインストールする。
+/// sudo実行時はCA証明書を一時ファイルにコピーしてから元ユーザー権限で実行する。
 #[cfg(target_os = "macos")]
 fn add_root_cert(device: &SimDevice, ca_cert_path: &Path) -> Result<()> {
-    let output = Command::new("xcrun")
-        .args(["simctl", "keychain", &device.udid, "add-root-cert"])
-        .arg(ca_cert_path)
-        .output()
-        .with_context(|| {
-            format!(
-                "xcrun simctl keychain add-root-cert の実行に失敗: device={}",
-                device.name
-            )
-        })?;
+    let run_as = sudo_user();
+
+    // sudo実行時は元ユーザーがCA証明書ディレクトリ(root:0700)を読めないため、
+    // 一時ファイルにコピーして渡す
+    let _temp_cert = if run_as.is_some() {
+        let content = std::fs::read(ca_cert_path)
+            .with_context(|| format!("CA証明書の読み取りに失敗: {}", ca_cert_path.display()))?;
+        let tmp = tempfile::NamedTempFile::new().context("一時ファイルの作成に失敗")?;
+        std::fs::write(tmp.path(), &content).context("一時ファイルへの書き込みに失敗")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(tmp.path(), std::fs::Permissions::from_mode(0o644))
+                .context("一時ファイルのパーミッション設定に失敗")?;
+        }
+        Some(tmp)
+    } else {
+        None
+    };
+
+    let cert_path = _temp_cert
+        .as_ref()
+        .map(|t| t.path().to_path_buf())
+        .unwrap_or_else(|| ca_cert_path.to_path_buf());
+
+    let output = simctl_command(
+        &["keychain", &device.udid, "add-root-cert"],
+        run_as.as_deref(),
+    )
+    .arg(&cert_path)
+    .output()
+    .with_context(|| {
+        format!(
+            "xcrun simctl keychain add-root-cert の実行に失敗: device={}",
+            device.name
+        )
+    })?;
+
+    // _temp_cert はスコープ終了時にDropされ、一時ファイルが自動削除される
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -190,8 +244,8 @@ fn add_root_cert(device: &SimDevice, ca_cert_path: &Path) -> Result<()> {
 /// 指定デバイスのキーチェーンをリセットする。
 #[cfg(target_os = "macos")]
 fn reset_keychain(device: &SimDevice) -> Result<()> {
-    let output = Command::new("xcrun")
-        .args(["simctl", "keychain", &device.udid, "reset"])
+    let run_as = sudo_user();
+    let output = simctl_command(&["keychain", &device.udid, "reset"], run_as.as_deref())
         .output()
         .with_context(|| {
             format!(
@@ -311,5 +365,26 @@ mod tests {
     fn parse_missing_devices_key_fails() {
         let err = parse_device_list_json("{}").unwrap_err();
         assert!(err.to_string().contains("devices"));
+    }
+
+    #[test]
+    fn simctl_command_direct_when_no_sudo_user() {
+        let cmd = simctl_command(&["list", "devices", "booted", "-j"], None);
+        assert_eq!(cmd.get_program(), "xcrun");
+        let args: Vec<&std::ffi::OsStr> = cmd.get_args().collect();
+        assert_eq!(args, &["simctl", "list", "devices", "booted", "-j"]);
+    }
+
+    #[test]
+    fn simctl_command_via_sudo_when_sudo_user_set() {
+        let cmd = simctl_command(&["list", "devices", "booted", "-j"], Some("sho"));
+        assert_eq!(cmd.get_program(), "sudo");
+        let args: Vec<&std::ffi::OsStr> = cmd.get_args().collect();
+        assert_eq!(
+            args,
+            &[
+                "-u", "sho", "xcrun", "simctl", "list", "devices", "booted", "-j"
+            ]
+        );
     }
 }
