@@ -30,6 +30,10 @@ const UPSTREAM_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Cap concurrent proxy connections to prevent resource exhaustion.
 const MAX_CONCURRENT_CONNECTIONS: usize = 512;
+/// ホストごとのアイドルコネクション数上限。無制限だとコネクションが蓄積する。
+const POOL_MAX_IDLE_PER_HOST: usize = 10;
+/// アイドルコネクションのタイムアウト。
+const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 struct ProxyRoute {
@@ -69,6 +73,8 @@ pub async fn run(proxies: Vec<ProxyConfig>, tls_config: Arc<ServerConfig>) -> Re
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(UPSTREAM_CONNECT_TIMEOUT)
             .timeout(UPSTREAM_REQUEST_TIMEOUT)
+            .pool_max_idle_per_host(POOL_MAX_IDLE_PER_HOST)
+            .pool_idle_timeout(POOL_IDLE_TIMEOUT)
             .build()
             .context("failed to build proxy http client")?,
     };
@@ -246,7 +252,7 @@ async fn forward(
 
     let mut upstream_req = client
         .request(parts.method.clone(), target)
-        .body(body_bytes.to_vec());
+        .body(body_bytes);
 
     // ホップバイホップヘッダーを除去してupstreamに転送する。
     // Hostはループ内でスキップし、ループ後に元の値を明示的に設定する。
@@ -271,7 +277,6 @@ async fn forward(
         .await
         .context("failed to send upstream request")?;
     let status = upstream_resp.status();
-    let headers = upstream_resp.headers().clone();
     let content_length = upstream_resp.content_length().unwrap_or(0);
     if content_length > MAX_RESPONSE_BODY_BYTES as u64 {
         return Ok(Response::builder()
@@ -279,25 +284,18 @@ async fn forward(
             .body(Body::from("upstream response body too large"))
             .expect("static response must build"));
     }
-    let body = upstream_resp
-        .bytes()
-        .await
-        .context("failed to read upstream response body")?;
-    if body.len() > MAX_RESPONSE_BODY_BYTES {
-        return Ok(Response::builder()
-            .status(StatusCode::BAD_GATEWAY)
-            .body(Body::from("upstream response body too large"))
-            .expect("static response must build"));
-    }
 
+    // ストリーミング前にヘッダーを取得（bytes_stream()がレスポンスを消費するため）
     let mut resp = Response::builder().status(status);
-    for (name, value) in &headers {
+    for (name, value) in upstream_resp.headers() {
         if !is_hop_by_hop(name) {
             resp = resp.header(name, value);
         }
     }
 
-    resp.body(Body::from(body))
+    // レスポンスボディをストリーミング転送し、全体をメモリに保持しない
+    let stream = upstream_resp.bytes_stream();
+    resp.body(Body::from_stream(stream))
         .map_err(|e| anyhow!("failed to build response: {}", e))
 }
 
