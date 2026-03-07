@@ -77,7 +77,7 @@ See `docs/release.md` for release and artifact verification policy.
 After downloading release files, verify them before execution.
 
 ```sh
-VERSION=v0.3.2
+VERSION=v0.3.3
 FILE=holonomy-${VERSION}-aarch64-apple-darwin.tar.gz
 ```
 
